@@ -3,7 +3,7 @@
     scalarField residual(epsilon1.primitiveField().size(), 1.0);
     scalar maxResidual = 1.0;
     scalar meanResidual = 1.0;
-    scalar Tresidual = 1.0;
+    // scalar Tresidual = 1.0;
 
     TRHS *= 0.0;
 
@@ -34,18 +34,45 @@
             scalarField& thermalDamperI = thermalDamper;
             const scalarField& rhoCpI = rhoCp;
             const scalarField& TI = T;
+
             forAll(thermalDamperI, celli)
             {
+                // ----- Selectable metal cp(T) -----
+                const scalar Tloc = TI[celli];
+
+                const scalar cpMetal_poly  = polycp_m.value(Tloc);
+
+                // default to polynomial; use table if present
+                scalar cpMetal_table = cpMetal_poly;
+                if (cpTab_mPtr.valid())
+                {
+                    cpMetal_table = (*cpTab_mPtr)(Tloc);
+                }
+
+                scalar cpMetal = cpMetal_poly;
+                if (cpModel == "table" && cpTab_mPtr.valid())
+                {
+                    cpMetal = cpMetal_table;
+                }
+                else if (cpModel == "hybrid" && cpTab_mPtr.valid())
+                {
+                    // blend: wTableCp * table + (1 - wTableCp) * polynomial
+                    cpMetal = wTableCp * cpMetal_table + (1.0 - wTableCp) * cpMetal_poly;
+                }
+                // else: "polynomial" (default)
+
+                // ----- Original damper formula, but using cpMetal for metal and polynomial for gas -----
                 thermalDamperI[celli] =
                     2.0*rhoCpI[celli]
-                   /(
-                       (rho1.value()*polycp_m.value(TI[celli]))
-                     + (rho2.value()*polycp_g.value(TI[celli]))
-                   );
+                /(
+                    rho1.value()*cpMetal
+                + rho2.value()*polycp_g.value(Tloc)
+                    );
             }
 
             thermalDamper.correctBoundaryConditions();
         }
+
 
         fvScalarMatrix TEqn
         (

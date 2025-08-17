@@ -1,4 +1,6 @@
 #include "createRDeltaT.H"
+#include "interpolationTable.H"
+
 
 const dimensionedScalar deltaN = 1e-8/pow(average(mesh.V()), 1.0/3.0);
 
@@ -147,6 +149,24 @@ IOdictionary phaseProperties
     )
 );
 
+// Select models (default: polynomial). Options: polynomial | table | hybrid
+const word cpModel
+(
+    transportProperties_metal.lookupOrDefault<word>("cpModel", "polynomial")
+);
+const word kappaModel
+(
+    transportProperties_metal.lookupOrDefault<word>("kappaModel", "polynomial")
+);
+
+// Hybrid blend weights (only used if model == "hybrid")
+const scalar wTableCp =
+    transportProperties_metal.lookupOrDefault<scalar>("wTableCp", 1.0);
+const scalar wTableKappa =
+    transportProperties_metal.lookupOrDefault<scalar>("wTableKappa", 1.0);
+
+
+
 const dimensionedScalar Tsolidus1
 (
     "Tsolidus1",
@@ -251,6 +271,45 @@ const Polynomial<8> polykappa_g(transportProperties_gas.lookup("poly_kappa"));
 
 const Polynomial<8> polycp_m(transportProperties_metal.lookup("poly_cp"));
 const Polynomial<8> polycp_g(transportProperties_gas.lookup("poly_cp"));
+
+
+// Optional tabular data for metal (constructed only if present in dict)
+autoPtr<interpolationTable<scalar>> cpTab_mPtr;
+autoPtr<interpolationTable<scalar>> kappaTab_mPtr;
+
+if (transportProperties_metal.found("table_cp"))
+{
+    const List<Tuple2<scalar, scalar>> cpList_m
+    (
+        transportProperties_metal.lookup("table_cp")
+    );
+    cpTab_mPtr.reset
+    (
+        new interpolationTable<scalar>
+        (
+            cpList_m,
+            interpolationTable<scalar>::CLAMP,
+            "physicalProperties.metal:table_cp"
+        )
+    );
+}
+
+if (transportProperties_metal.found("table_kappa"))
+{
+    const List<Tuple2<scalar, scalar>> kappaList_m
+    (
+        transportProperties_metal.lookup("table_kappa")
+    );
+    kappaTab_mPtr.reset
+    (
+        new interpolationTable<scalar>
+        (
+            kappaList_m,
+            interpolationTable<scalar>::CLAMP,
+            "physicalProperties.metal:table_kappa"
+        )
+    );
+}
 
 
 volScalarField cp
