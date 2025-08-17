@@ -8,60 +8,97 @@
     {
         const scalar Tloc = TI[celli];
 
-        // ---- Metal kappa(T): selectable model ----
-        const scalar kMetal_poly  = polykappa_m.value(Tloc);
+        // Gas phase (unchanged): always polynomial
+        const scalar kGas = polykappa_g.value(Tloc);
+        const scalar cpGas = polycp_g.value(Tloc);
 
-        // default to polynomial if no table present
-        scalar kMetal_table = kMetal_poly;
-        if (kappaTab_mPtr.valid())
+        // ---- Metal kappa(T) ----
+        scalar kMetal = 0.0;
+        if (kappaModel == "table")
         {
-            kMetal_table = (*kappaTab_mPtr)(Tloc);
+            if (!kappaTab_mPtr.valid())
+            {
+                FatalErrorInFunction
+                    << "kappaModel=table but 'table_kappa' missing in physicalProperties.metal" << nl
+                    << exit(FatalError);
+            }
+            kMetal = (*kappaTab_mPtr)(Tloc);
+        }
+        else if (kappaModel == "polynomial")
+        {
+            if (!polykappa_mPtr.valid())
+            {
+                FatalErrorInFunction
+                    << "kappaModel=polynomial but 'poly_kappa' missing in physicalProperties.metal" << nl
+                    << exit(FatalError);
+            }
+            kMetal = polykappa_mPtr->value(Tloc);
+        }
+        else if (kappaModel == "hybrid")
+        {
+            if (!kappaTab_mPtr.valid() || !polykappa_mPtr.valid())
+            {
+                FatalErrorInFunction
+                    << "kappaModel=hybrid requires both 'table_kappa' and 'poly_kappa' in physicalProperties.metal" << nl
+                    << exit(FatalError);
+            }
+            const scalar kTab = (*kappaTab_mPtr)(Tloc);
+            const scalar kPol = polykappa_mPtr->value(Tloc);
+            kMetal = wTableKappa * kTab + (1.0 - wTableKappa) * kPol;
+        }
+        else
+        {
+            FatalErrorInFunction
+                << "Unknown kappaModel: " << kappaModel
+                << " (expected 'polynomial', 'table', or 'hybrid')." << nl
+                << exit(FatalError);
         }
 
-        scalar kMetal = kMetal_poly;
-        if (kappaModel == "table" && kappaTab_mPtr.valid())
+        // ---- Metal cp(T) ----
+        scalar cpMetal = 0.0;
+        if (cpModel == "table")
         {
-            kMetal = kMetal_table;
+            if (!cpTab_mPtr.valid())
+            {
+                FatalErrorInFunction
+                    << "cpModel=table but 'table_cp' missing in physicalProperties.metal" << nl
+                    << exit(FatalError);
+            }
+            cpMetal = (*cpTab_mPtr)(Tloc);
         }
-        else if (kappaModel == "hybrid" && kappaTab_mPtr.valid())
+        else if (cpModel == "polynomial")
         {
-            // blend: wTableKappa * table + (1-w) * polynomial
-            kMetal = wTableKappa * kMetal_table + (1.0 - wTableKappa) * kMetal_poly;
+            if (!polycp_mPtr.valid())
+            {
+                FatalErrorInFunction
+                    << "cpModel=polynomial but 'poly_cp' missing in physicalProperties.metal" << nl
+                    << exit(FatalError);
+            }
+            cpMetal = polycp_mPtr->value(Tloc);
         }
-        // else: "polynomial" (default)
+        else if (cpModel == "hybrid")
+        {
+            if (!cpTab_mPtr.valid() || !polycp_mPtr.valid())
+            {
+                FatalErrorInFunction
+                    << "cpModel=hybrid requires both 'table_cp' and 'poly_cp' in physicalProperties.metal" << nl
+                    << exit(FatalError);
+            }
+            const scalar cpTab = (*cpTab_mPtr)(Tloc);
+            const scalar cpPol = polycp_mPtr->value(Tloc);
+            cpMetal = wTableCp * cpTab + (1.0 - wTableCp) * cpPol;
+        }
+        else
+        {
+            FatalErrorInFunction
+                << "Unknown cpModel: " << cpModel
+                << " (expected 'polynomial', 'table', or 'hybrid')." << nl
+                << exit(FatalError);
+        }
 
-        // ---- Metal cp(T): selectable model ----
-        const scalar cpMetal_poly  = polycp_m.value(Tloc);
-
-        // default to polynomial if no table present
-        scalar cpMetal_table = cpMetal_poly;
-        if (cpTab_mPtr.valid())
-        {
-            cpMetal_table = (*cpTab_mPtr)(Tloc);
-        }
-
-        scalar cpMetal = cpMetal_poly;
-        if (cpModel == "table" && cpTab_mPtr.valid())
-        {
-            cpMetal = cpMetal_table;
-        }
-        else if (cpModel == "hybrid" && cpTab_mPtr.valid())
-        {
-            // blend: wTableCp * table + (1-w) * polynomial
-            cpMetal = wTableCp * cpMetal_table + (1.0 - wTableCp) * cpMetal_poly;
-        }
-        // else: "polynomial" (default)
-
-        // ---- Phase mixing (metal/gas) unchanged ----
         const scalar a = max(min(alpha1I[celli], 1.0), 0.0);
-
-        kappaI[celli] =
-              a       * kMetal
-            + (1.0-a) * polykappa_g.value(Tloc);
-
-        cpI[celli] =
-              a       * cpMetal
-            + (1.0-a) * polycp_g.value(Tloc);
+        kappaI[celli] = a*kMetal + (1.0 - a)*kGas;
+        cpI[celli]    = a*cpMetal + (1.0 - a)*cpGas;
     }
 
     kappa.correctBoundaryConditions();

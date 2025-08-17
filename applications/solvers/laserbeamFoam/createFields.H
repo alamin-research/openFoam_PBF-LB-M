@@ -266,11 +266,29 @@ const dimensionedScalar R
 );
 
 
-const Polynomial<8> polykappa_m(transportProperties_metal.lookup("poly_kappa"));
-const Polynomial<8> polykappa_g(transportProperties_gas.lookup("poly_kappa"));
+// --- Metal polynomials are OPTIONAL ---
+autoPtr<Polynomial<8>> polykappa_mPtr;
+if (transportProperties_metal.found("poly_kappa"))
+{
+    polykappa_mPtr.reset
+    (
+        new Polynomial<8>(transportProperties_metal.lookup("poly_kappa"))
+    );
+}
 
-const Polynomial<8> polycp_m(transportProperties_metal.lookup("poly_cp"));
+autoPtr<Polynomial<8>> polycp_mPtr;
+if (transportProperties_metal.found("poly_cp"))
+{
+    polycp_mPtr.reset
+    (
+        new Polynomial<8>(transportProperties_metal.lookup("poly_cp"))
+    );
+}
+
+// --- Gas polynomials are REQUIRED (as before) ---
+const Polynomial<8> polykappa_g(transportProperties_gas.lookup("poly_kappa"));
 const Polynomial<8> polycp_g(transportProperties_gas.lookup("poly_cp"));
+
 
 
 // Optional tabular data for metal (constructed only if present in dict)

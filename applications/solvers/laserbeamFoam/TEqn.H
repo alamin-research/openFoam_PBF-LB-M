@@ -37,41 +37,55 @@
 
             forAll(thermalDamperI, celli)
             {
-                // ----- Selectable metal cp(T) -----
                 const scalar Tloc = TI[celli];
 
-                const scalar cpMetal_poly  = polycp_m.value(Tloc);
-
-                // default to polynomial; use table if present
-                scalar cpMetal_table = cpMetal_poly;
-                if (cpTab_mPtr.valid())
+                // Select metal cp(T) according to model
+                scalar cpMetal = 0.0;
+                if (cpModel == "table")
                 {
-                    cpMetal_table = (*cpTab_mPtr)(Tloc);
+                    if (!cpTab_mPtr.valid())
+                    {
+                        FatalErrorInFunction
+                            << "cpModel=table but 'table_cp' missing in physicalProperties.metal" << nl
+                            << exit(FatalError);
+                    }
+                    cpMetal = (*cpTab_mPtr)(Tloc);
+                }
+                else if (cpModel == "polynomial")
+                {
+                    if (!polycp_mPtr.valid())
+                    {
+                        FatalErrorInFunction
+                            << "cpModel=polynomial but 'poly_cp' missing in physicalProperties.metal" << nl
+                            << exit(FatalError);
+                    }
+                    cpMetal = polycp_mPtr->value(Tloc);
+                }
+                else if (cpModel == "hybrid")
+                {
+                    if (!cpTab_mPtr.valid() || !polycp_mPtr.valid())
+                    {
+                        FatalErrorInFunction
+                            << "cpModel=hybrid requires both 'table_cp' and 'poly_cp' in physicalProperties.metal" << nl
+                            << exit(FatalError);
+                    }
+                    const scalar cpTab = (*cpTab_mPtr)(Tloc);
+                    const scalar cpPol = polycp_mPtr->value(Tloc);
+                    cpMetal = wTableCp * cpTab + (1.0 - wTableCp) * cpPol;
                 }
 
-                scalar cpMetal = cpMetal_poly;
-                if (cpModel == "table" && cpTab_mPtr.valid())
-                {
-                    cpMetal = cpMetal_table;
-                }
-                else if (cpModel == "hybrid" && cpTab_mPtr.valid())
-                {
-                    // blend: wTableCp * table + (1 - wTableCp) * polynomial
-                    cpMetal = wTableCp * cpMetal_table + (1.0 - wTableCp) * cpMetal_poly;
-                }
-                // else: "polynomial" (default)
-
-                // ----- Original damper formula, but using cpMetal for metal and polynomial for gas -----
+                // Original formula, gas cp is polynomial
                 thermalDamperI[celli] =
-                    2.0*rhoCpI[celli]
+                    2.0 * rhoCpI[celli]
                 /(
                     rho1.value()*cpMetal
-                + rho2.value()*polycp_g.value(Tloc)
+                    + rho2.value()*polycp_g.value(Tloc)
                     );
             }
 
             thermalDamper.correctBoundaryConditions();
         }
+
 
 
         fvScalarMatrix TEqn
