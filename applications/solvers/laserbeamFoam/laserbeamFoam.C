@@ -85,6 +85,10 @@ int main(int argc, char *argv[])
         #include "readControls.H"
         #include "readDyMControls.H"
 
+        // MODIFICATION: Automated track ID calculation
+        label currentTrack = floor(runTime.value() / trackDuration) + 1;
+        // End of Modification
+
         if (LTS)
         {
             #include "setRDeltaT.H"
@@ -218,6 +222,16 @@ int main(int argc, char *argv[])
             mesh.lookupObject<volScalarField>("alpha.metal");
         condition = pos(alphaMetal - 0.5) * pos(epsilon1 - 0.5);
         meltHistory += condition;
+
+        // Modification start: Update new meltTrackID 
+        forAll(meltTrackID, celli)
+        {
+            if (condition[celli] > 0.5) // If the cell is molten (condition == 1)
+            {
+                meltTrackID[celli] = currentTrack;
+            }
+        }
+        // End of Modification
 
         runTime.write();
 
